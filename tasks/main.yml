@@ -1,0 +1,114 @@
+---
+- name: Ensure newrelic GPG key
+  apt_key: 
+    url: "{{ newrelic_apt_repo_gpg }}"
+  tags: [all, installation]
+
+- name: Ensure official newrelic repository
+  apt_repository: 
+    repo: "{{ newrelic_apt_repo  }}"
+  tags: [all, installation]
+
+- name: Set default newrelic application-name
+  debconf:
+    name: "newrelic-php5"
+    question: "newrelic-php5/application-name"
+    value: "{{ newrelic_appname }}"
+    vtype: string
+  tags: [all, installation]
+
+- name: Set newrelic license-key
+  debconf:
+    name: "newrelic-php5"
+    question: "newrelic-php5/license-key"
+    value: "{{ newrelic_license }}"
+    vtype: string
+  tags: [all, installation]
+
+- name: Install the newrelic packages
+  package: 
+    name: "{{ item }}"
+    state: present
+    install_recommends: no
+  with_items: "{{ newrelic_packages }}"
+  tags: [all, installation]
+  notify:
+    - restart php msg
+    - enable newrelic-daemon
+    - restart newrelic-daemon
+
+- name: Copy the newrelic-daemon configuration file
+  template:
+    src: "newrelic.cfg.j2"
+    dest: "/etc/newrelic/newrelic.cfg"
+  notify:
+    - enable newrelic-daemon
+    - restart newrelic-daemon
+  tags: [all, installation, config]
+
+- name: Stat php config folders
+  stat:
+    path: "{{ item }}"
+  with_items: "{{ newrelic_php_folders }}"
+  register: "php_folders_existing"
+  tags: [all, installation, config]
+
+- name: Copy the newrelic.ini file to php mods-available folders
+  template:
+    src: "newrelic.ini.j2"
+    dest: "{{ item.stat.path }}/mods-available/newrelic.ini"
+  with_items: "{{ php_folders_existing.results }}"
+  when: item.stat.exists
+  notify:
+    - restart php msg
+  tags: [all, installation, config]
+
+- name: Stat php-cli config folders
+  stat:
+    path: "{{ item }}/cli/conf.d"
+  with_items: "{{ newrelic_php_folders }}"
+  register: "php_cli_folders_existing"
+  tags: [all, installation, config]
+
+- name: Create symliks for newrelic.ini files in php-cli folder
+  file:
+    src: "./../../mods-available/newrelic.ini"
+    dest: "{{ item.stat.path }}/20-newrelic.ini"
+    state: "link"  
+  with_items: "{{ php_cli_folders_existing.results }}"
+  when: item.stat.exists
+  notify:
+    - restart php msg
+  tags: [all, installation, config]
+
+- name: Stat php-fpm config folders
+  stat:
+    path: "{{ item }}/fpm/conf.d"
+  with_items: "{{ newrelic_php_folders }}"
+  register: "php_fpm_folders_existing"
+  tags: [all, installation, config]
+
+- name: Create symliks for newrelic.ini files in php-fpm folder
+  file:
+    src: "./../../mods-available/newrelic.ini"
+    dest: "{{ item.stat.path }}/20-newrelic.ini"
+    state: "link"
+  with_items: "{{ php_fpm_folders_existing.results }}"
+  when: item.stat.exists
+  notify:
+    - restart php msg
+  tags: [all, installation, config]
+
+- name: Disable newrelic-daemon
+  service:
+    name: newrelic-daemon
+    enabled: no
+  when: newrelic_daemon_enabled == False
+  notify:
+    - stop newrelic-daemon
+    - disable newrelic-daemon
+
+- debug:
+    msg: "Be carefully - newrelic-agent is still here and sending data to newrelic by hit"
+  when: newrelic_daemon_enabled == False
+  tags: [all, installation] 

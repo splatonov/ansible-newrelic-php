@@ -1,0 +1,33 @@
+---
+# Attention!
+# Newrelic provides broken init script in deb packages. You can't start it via "service newrelic-daemon start"
+# Don't try to use the ansible service module. It wont work with newrelic-daemon
+# Or you can write your own service
+
+- name: restart newrelic-daemon
+  command: "/etc/init.d/newrelic-daemon restart"
+  register: result
+
+- name: stop newrelic-daemon
+  command: "/etc/init.d/newrelic-daemon stop"
+  register: result
+
+- name: start newrelic-daemon
+  command: "/etc/init.d/newrelic-daemon start"
+  register: result
+
+- name: enable newrelic-daemon
+  service:
+    name: newrelic-daemon
+    enabled: yes
+  when: newrelic_daemon_enabled == True 
+
+- name: disable newrelic-daemon
+  service:
+    name: newrelic-daemon
+    enabled: no
+  when: newrelic_daemon_enabled == False
+
+- name: restart php msg
+  debug:
+      msg: "You should restart php daemons (apache2, php-fpm etc) manually to apply newrelic agent configuration"
